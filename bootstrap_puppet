@@ -1,0 +1,242 @@
+#!/bin/bash
+## Installs puppet on ubuntu and issues puppet certificate sighning request with the puppet master
+NAME='bootstrap_puppet';
+SSH_KEY="$HOME/.ssh/id_rsa";
+
+PUPPET_MASTER='self';
+PUPPETDIR='/etc/puppet';
+
+PUPPET_GEM_URL='http://downloads.puppetlabs.com/gems/puppet-2.7.0.gem';
+FACTER_GEM_URL='http://downloads.puppetlabs.com/gems/facter-1.6.0.gem';
+
+function install_git(){
+  aptitude install git
+}
+
+function install_ruby(){
+  
+  aptitude install ruby1.8 rubygems1.8 libshadow-ruby1.8 libopenssl-ruby1.8 
+
+}
+
+function install_puppet(){
+  wget --quiet $PUPPET_GEM_URL -O puppet.gem;
+  gem1.8 install puppet.gem  --no-rdoc --no-ri;
+}
+
+function install_facter(){
+  wget --quiet $FACTER_GEM_URL -O facter.gem;
+  gem1.8 install facter.gem  --no-rdoc --no-ri;
+}
+
+function set_puppet_client(){
+  [ `grep puppet /etc/hosts > /dev/null` $? -gt 0 ] && echo "$PUPPET_MASTER	puppet" >> /etc/hosts || echo -e "Puppet master:\t\tSet Puppet Master ip in /etc/hosts";
+}
+
+function test_env(){
+  . /etc/environment;
+  RUBY=1;
+  PUPPET=1;
+  FACTER=1;
+  MSG='';
+
+  [ `ruby1.8 --version | grep -q "1.8.[7-9]"` $? -gt 0 ] && RUBY=0 MSG=$MSG"ruby1.8\t\t\tAbsent\n" || MSG=$MSG"ruby1.8\t\t\tInstalled\n";
+  [ `aptitude search 'libopenssl-ruby1.8' |grep -q "^i"` $? -eq 1 ] && RUBY=0 MSG=$MSG"libopenssl-ruby1.8:\tAbsent\n" || MSG=$MSG"libopenssl-ruby1.8:\tInstalled\n";
+  [ `aptitude search 'libshadow-ruby1.8' |grep -q "^i"` $? -eq 1 ] && RUBY=0 MSG=$MSG"libshadow-ruby1.8:\tAbsent\n" || MSG=$MSG"libshadow-ruby1.8:\tInstalled\n";
+  [ `aptitude search 'rubygems1.8' |grep -q "^i"` $? -eq 1 ] && RUBY=0 MSG=$MSG"rubygems1.8:\t\tAbsent\n" || MSG=$MSG"rubygems1.8:\t\tInstalled\n";
+
+  [ `which puppet >/dev/null` $? -eq 1 ] && MSG=$MSG"puppet:\t\t\tAbsent\n" PUPPET=0 || MSG=$MSG"puppet:\t\t\tInstalled\n";
+  [ `which facter >/dev/null` $? -eq 1 ] && MSG=$MSG"facter:\t\t\tAbsent\n" FACTER=0 || MSG=$MSG"facter:\t\t\tInstalled\n";
+
+  echo -e $MSG;
+
+}
+
+function certify_puppet(){
+  [ `puppet agent --test > /dev/null` $? -gt 0 ] && echo -e "puppet agent:\t\tRun Manually \"sudo puppet agent --test\"" || echo -e "puppet agent\t\tSuccess";
+  echo "Puppetmaster is `grep 'puppet' /etc/hosts`";
+  echo 'If this is the first run for this master, you may need to sign the request manually';
+}
+
+function install_boot_script(){
+  cat > /etc/init.d/puppet_init <<NEWDOC
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides: puppet_init
+# Required-Start: $all
+# Required-Stop: 
+# Default-Start: 2 3 4 5
+# Default-Stop:
+# Short-Description: Post install script
+# Description: This script installs puppet, (ruby and rubygems), and adds /etc/mentor_success. It also modifies system paths for support puppet and facter on RHEL, Ubuntu and CentOS.
+### END INIT INFO
+# ----------------------------------------------------------------------
+#    Copyright (c) 2010, 2011 Lewis & Clark College
+#
+#    This program is free software; you can redistribute it and/or
+#    modify it under the terms of version 2 of the GNU General Public
+#    License published by the Free Software Foundation.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, contact Novell, Inc.
+# ----------------------------------------------------------------------
+# Authors: Nick Shobe <nickshobe@gmail.com>
+#
+
+
+
+### Main section ###
+
+NAME='puppet_init';
+
+case "$1" in
+  start)
+        echo "Setting up $NAME "
+        puppet agent --no-daemonize;
+        ;;
+
+  stop)
+        echo "Nothing to do exiting "
+        exit 0
+        ;;
+
+  restart)
+        puppet agent --no-daemonize;
+        ;;
+  *)
+        puppet agent --no-daemonize;
+        ;;  
+esac
+
+NEWDOC
+  
+  [ `update-rc.d puppet_init` $? -eq 0 ] && echo -e 'puppet_init:\t\t\tInstalled' || echo -e 'puppet_init\t\tFailed';
+  
+
+}
+
+function set_puppet_master(){
+  #if this is a master, set it up as one
+  echo -e "puppet base:\t\t$PUPPETDIR";
+  rm -Rf /etc/puppet/ssl/*
+  [ `grep 'puppet' /etc/passwd > /dev/null` $? -gt 0 ] && useradd puppet | echo -e 'puppet user:\t\tCreated' || echo -e 'puppet user:\t\tExists';
+
+  # will fail, but creates directories
+  [ -f /var/lib/puppet/run/master.pid ] && kill -2 `cat /var/lib/puppet/run/master.pid`;
+  sleep 2;
+  [ -f /var/lib/puppet/run/master.pid ] && rm /var/lib/puppet/run/master.pid;
+  puppet master;
+  [ $? -gt 0 ] && echo -e 'puppet master init:\tFailed' || echo -e 'puppet master init:\tSuccess';
+  sleep 5;
+  kill -2 `cat /var/lib/puppet/run/master.pid`;
+  sleep 1;
+  [ -f /var/lib/puppet/run/master.pid ] && rm /var/lib/puppet/run/master.pid | echo 'deleting';
+  [ -d /var/lib/puppet/rrd ] && echo -e 'dir rrd:\t\tExists' || mkdir /var/lib/puppet/rrd | echo -e 'dir rrd:\t\tCreated';
+  chown puppet:puppet /var/lib/puppet/rrd
+  
+  cd $PUPPETDIR
+  ## rsa key needs to be in place on github for this to work.
+  SSH_ENTRY=`cat <<DOC
+Host github.com
+  User git
+  Hostname github.com
+  PreferredAuthentications publickey
+  IdentityFile $SSH_KEY 
+DOC
+`
+
+  [ `grep github.com /root/.ssh/config > /dev/null` $? -gt 0 ] && echo -e "$SSH_ENTRY" >> /root/.ssh/config;
+  [ `ls puppet_repo/ |wc -w` -eq 0 ] && git clone git@github.com:lewisandclark/puppet_repo.git;
+  
+  ### setup production environment ###
+  [ -d "$PUPPETDIR/prod/modules" ] && echo -e 'dir prod/modules:\tExists' || mkdir -p $PUPPETDIR/prod/modules | echo 'dir prod/modules:\tCreated';
+  [ -d "$PUPPETDIR/prod/modules" ] && echo -e 'dir manifests:\t\tExists' || mkdir $PUPPETDIR/manifests | echo 'dir manifests:\t\tCreated';
+  [ -h "$PUPPETDIR/repo" ] && echo -e 'link repo:\t\tExists' || ln -s $PUPPETDIR/puppet_repo $PUPPETDIR/repo |echo 'link repo\t\tCreated';
+  [ -h "$PUPPETDIR/modules" ] && echo -e 'link modules:\t\tExists' || ln -s $PUPPETDIR/prod/modules modules |echo 'link modules\t\tCreated';
+  ## final /etc/puppet dir structure looks like
+  ## /etc/puppet/prod 
+  ## /etc/puppet/modules -> /etc/puppet/prod/modules
+  ## /etc/puppet/repo -- the real git repo
+  # install default puppet server settings in site.pp
+  [ -d "$PUPPETDIR/manifests" ] && echo -e 'dir manifests:\t\tExists' || mkdir $PUPPETDIR/manifests modules |echo 'dir manifests\t\tCreated';
+  [ -f "$PUPPETDIR/manifests/site.pp" ] && echo -e 'file site.pp\t\tExists' || echo -e "node default {\n  include puppet_base\n}\n\nnode $(facter hostname) inherits default {\n  include puppet_master\n}" > /etc/puppet/manifests/site.pp |echo -e 'file site.pp\t\tCreated';
+  
+  # Finally exec of puppet master service.
+  [ `puppet master` $? -eq 0 ] && echo -e 'puppet master:\t\tRunning' || echo -e 'puppet master:\t\tError';
+  
+  [ `grep -q 'puppet' /etc/hosts` $? -gt 0 ] && sed -i 's/127.0.0.1/127.0.0.1\tpuppet/' /etc/hosts || echo -e '/etc/hosts:\t\tExists';
+}
+
+function set_env(){
+  # Set correct environmental path.
+  grep "/var/lib/gems/1.8/bin" /etc/environment > /dev/null;
+  if [ $? -ne 0 ]; then
+    sed -i 's/PATH="/PATH="\/var\/lib\/gems\/1.8\/bin:/' /etc/environment;
+  fi
+  
+  grep "/var/lib/gems/1.8/bin" /etc/sudoers > /dev/null;
+  if [ $? -ne 0; then
+    echo "Defaults	secure_path=/var/lib/gems/1.8/bin:$PATH" >> /etc/sudoers;
+    echo -e "Warning:\tsecure_path appended to /etc/sudoers without being checked";
+  fi
+
+  ## Ensure new paths are loaded for root on login.
+  if [ -e /root/.bashrc ]; then
+    grep '. /etc/environment' /root/.bashrc > /dev/null;
+    [ $? -gt 0 ] && echo '. /etc/environment' >> /root/.bashrc;
+  elif [ -e /root/.profile ]; then
+    grep '. /etc/environment' /root/.profile > /dev/null;
+    [ $? -gt 0 ] && echo '. /etc/environment' >>  /root/.profile;
+  fi
+  
+  if [ -e /etc/bash.bashrc ]; then
+    grep '. /etc/environment' /etc/bash.bashrc > /dev/null;
+    [ $? -gt 0 ] && echo '. /etc/environment' >>  /etc/bash.bashrc;
+  elif [ -e /etc/profile ]; then
+    grep '. /etc/environment' /etc/profile > /dev/null;
+    [ $? -gt 0 ] && echo '. /etc/environment' >>  /etc/profile;
+  fi
+
+  echo -e "/etc/environment:\t`grep 'PATH=' /etc/environment`";
+  echo -e "path set in:\t\t/etc/environment";
+}
+
+### Main section ###
+
+if [ "$1" != '' ]; then
+  PUPPET_MASTER="$1"
+fi
+
+test_env
+
+if [ $RUBY -eq 0 ]; then
+  install_ruby;
+fi
+
+set_env
+
+if [ $PUPPET -eq 0 ]; then
+  install_puppet;
+fi
+
+if [ $FACTER -eq 0 ]; then
+  install_facter;
+fi
+
+if [ "$PUPPET_MASTER" == 'self' ]; then
+  install_git
+  set_puppet_master
+else
+  set_puppet_client
+fi
+
+# install_boot_script
+
+certify_puppet
+
+

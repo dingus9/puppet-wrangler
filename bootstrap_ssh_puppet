@@ -1,0 +1,25 @@
+#!/bin/bash
+key="`cat ~/.ssh/id_rsa.pub`";
+host=$1;
+puppet_master=$2
+host_fqdn=$3;
+ssh_user=$USER;
+id_cmd='';
+
+#bootstrap script to server
+echo -e "Bootstrap_ssh:\t\tcopying bootstrap_puppet.sh to $host";
+scp $id_cmd ./bootstrap_puppet.sh $ssh_user@$host:~/bootstrap_puppet.sh;
+
+#run bootstrap_puppet.sh
+echo -e "Bootstrap_ssh:\t\tRemotely execing bootstrap puppet";
+ssh $id_cmd $ssh_user@$host "chmod 700 bootstrap_puppet.sh";
+ssh -t $id_cmd $ssh_user@$host "sudo /bin/bash bootstrap_puppet.sh $puppet_master";
+
+## sign
+
+tmp_fqdn="`ssh -t $id_cmd $ssh_user@$host 'facter fqdn'`";
+host_fqdn="`echo $tmp_fqdn |tr -dc '[:print:]'`";
+echo -e "Bootstrap_ssh:\t\tRemotely execing bootstrap puppet";
+echo -e "Bootstrap_ssh:\t\tsigning cert for '$host_fqdn' on puppet master '$puppet_master'";
+ssh -t $id_cmd $ssh_user@$puppet_master "sudo puppet cert sign $host_fqdn";
+

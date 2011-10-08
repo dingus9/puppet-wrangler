@@ -1,0 +1,14 @@
+key="`cat ~/.ssh/id_rsa.pub`";
+#key='';
+host=$1;
+ssh_user=$USER;
+user=$USER;
+id_cmd=''
+
+ssh $id_cmd $ssh_user@$host "[ -d \$HOME/.ssh ] && echo '' || mkdir \$HOME/.ssh";
+ssh $id_cmd $ssh_user@$host "chmod 755 \$HOME/.ssh";
+
+ssh $id_cmd $ssh_user@$host "echo -n \"$key\" >> \$HOME/.ssh/authorized_keys2";
+
+ssh $id_cmd $ssh_user@$host "chmod 744 \$HOME/.ssh";
+ 
