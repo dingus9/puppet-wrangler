@@ -176,12 +176,12 @@ function set_env(){
   # Set correct environmental path.
   grep "/var/lib/gems/1.8/bin" /etc/environment > /dev/null;
   if [ $? -ne 0 ]; then
-    sed -i 's/PATH="/PATH="\/var\/lib\/gems\/1.8\/bin:/' /etc/environment;
+    sed -i "s/PATH=.*/PATH=$( echo "$PATH" | sed 's/\//\\\//g' ):\/var\/lib\/gems\/1.8\/bin:/" /etc/environment
   fi
   
   grep "/var/lib/gems/1.8/bin" /etc/sudoers > /dev/null;
   if [ $? -ne 0; then
-    echo "Defaults	secure_path=/var/lib/gems/1.8/bin:$PATH" >> /etc/sudoers;
+    echo "Defaults	secure_path=$PATH:/var/lib/gems/1.8/bin" >> /etc/sudoers;
     echo -e "Warning:\tsecure_path appended to /etc/sudoers without being checked";
   fi
 
