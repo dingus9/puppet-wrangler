@@ -1,4 +1,6 @@
 #!/bin/bash
+## Example:
+## bootstrap_ssh_puppet target.com puppetmasterIP 
 key="`cat ~/.ssh/id_rsa.pub`";
 host=$1;
 puppet_master=$2
@@ -7,13 +9,13 @@ ssh_user=$USER;
 id_cmd='';
 
 #bootstrap script to server
-echo -e "Bootstrap_ssh:\t\tcopying bootstrap_puppet.sh to $host";
-scp $id_cmd ./bootstrap_puppet.sh $ssh_user@$host:~/bootstrap_puppet.sh;
+echo -e "Bootstrap_ssh:\t\tcopying bootstrap_puppet to $host";
+scp $id_cmd ./bootstrap_puppet $ssh_user@$host:~/bootstrap_puppet;
 
-#run bootstrap_puppet.sh
+#run bootstrap_puppet
 echo -e "Bootstrap_ssh:\t\tRemotely execing bootstrap puppet";
-ssh $id_cmd $ssh_user@$host "chmod 700 bootstrap_puppet.sh";
-ssh -t $id_cmd $ssh_user@$host "sudo /bin/bash bootstrap_puppet.sh $puppet_master";
+ssh $id_cmd $ssh_user@$host "chmod 700 bootstrap_puppet";
+ssh -t $id_cmd $ssh_user@$host "sudo /bin/bash bootstrap_puppet $puppet_master";
 
 ## sign
 

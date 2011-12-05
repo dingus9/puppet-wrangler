@@ -180,7 +180,7 @@ function set_env(){
   fi
   
   grep "/var/lib/gems/1.8/bin" /etc/sudoers > /dev/null;
-  if [ $? -ne 0; then
+  if [ $? -ne 0 ]; then
     echo "Defaults	secure_path=$PATH:/var/lib/gems/1.8/bin" >> /etc/sudoers;
     echo -e "Warning:\tsecure_path appended to /etc/sudoers without being checked";
   fi
