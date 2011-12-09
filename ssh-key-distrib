@@ -1,14 +1,84 @@
-key="`cat ~/.ssh/id_rsa.pub`";
-#key='';
-host=$1;
-ssh_user=$USER;
-user=$USER;
-id_cmd=''
+#!/bin/bash
+## Users must have sudo rights to use this file to deploy to users other then themselves.
+tmp=$(echo "$@"|grep -Eo '(-u|--user)=[A-Za-z0-9_\-]+'| grep -Eo '=[A-Za-z0-9_\-]+'|grep -Eo '[A-Za-z0-9_\-]+')
+[ -n "$tmp" ] && ssh_user=$tmp || ssh_user=$USER;
 
-ssh $id_cmd $ssh_user@$host "[ -d \$HOME/.ssh ] && echo '' || mkdir \$HOME/.ssh";
-ssh $id_cmd $ssh_user@$host "chmod 755 \$HOME/.ssh";
+tmp=$(echo "$@"|grep -Eo '(-U|--tgt_user)=[A-Za-z0-9_\-]+'| grep -Eo '=[A-Za-z0-9_\-]+'|grep -Eo '[A-Za-z0-9_\-]+')
+[ -n "$tmp" ] && tgt_user=$tmp || tgt_user=$USER;
 
-ssh $id_cmd $ssh_user@$host "echo -n \"$key\" >> \$HOME/.ssh/authorized_keys2";
+tmp=$(echo "$@"|grep -Eo '(-k|--key)=([A-Za-z0-9_\/\-\.]+|".+")'| grep -Eo '=([A-Za-z0-9_\/\-\.]+|".+")'|grep -Eo '([A-Za-z0-9_\/\-\.]+|".+")')
+[ -n "$tmp" ] && keyfile="$tmp" || keyfile="~/.ssh/id_rsa";
 
-ssh $id_cmd $ssh_user@$host "chmod 744 \$HOME/.ssh";
+tmp=$(echo "$@"|grep -Eo '(-H|--host)=([A-Za-z0-9_\/\-\.]+|".+")'| grep -Eo '=([A-Za-z0-9_\/\-\.]+|".+")'|grep -Eo '([A-Za-z0-9_\/\-\.]+|".+")')
+[ -n "$tmp" ] && host=$tmp || host='';
+
+tmp=$(echo "$@"|grep -Eo '(-o|--opts)=([A-Za-z0-9_\/\-\.]+|".+")'| grep -Eo '=([A-Za-z0-9_\/\-\.]+|".+")'|grep -Eo '([A-Za-z0-9_\/\-\.]+|".+")')
+[ -n "$tmp" ] && id_cmd=$tmp || id_cmd='';
+
+tmp=$(echo "$@"|grep -Eo '(-s|--sudo)')
+[ -n "$tmp" ] && sudo='sudo' || sudo='';
+
+tmp=$(echo "$@"|grep -Eo '(-h|--help)')
+[ -n "$tmp" ] && help='true' || help='';
+
+tmp=$(echo "$@"|grep -Eo '(-D|--delete)')
+[ -n "$tmp" ] && delete='true' || delete='false';
+
+function usage {
+echo -e "$1Usage: ssh-key-distrib -H|--host=example.com [-u|--user=user -U|--tgt_user=TargetUser -k|--key=keyfile -o|--opts=\"ssh options\" -s|--sudo"
+echo -e "-H,--host\tSpecify the host to copy key to.
+-u,--user\tSpecify the user to connect as.
+-U,--tgt_user\tSpecify the target user on the host system.
+-k,--key\tSpecify the keyfile to read and copy to authorized_keys2 on the host.
+-o,--opts\tAdd extra ssh options here.
+-s,--sudo\tUse sudo on the server side to copy keys to alternate user(-u user must have sudo on host.)
+-D,--delete\tDelete key from specified host.
+-h,--help\tThis help message.";
+exit 1;
+}
+
+[ -n "$help" ] && usage || t=1;
+
+if [ -z "$host" ]; then
+  usage "-h|--host is required:\n"
+fi
+
+if [ "$sudo" == 'sudo' ] && [ "$tgt_user" != "$ssh_user" ]; then
+  sudo_cmd="sudo -u $tgt_user";
+  id_cmd="$id_cmd -t -q"
+else
+  sudo_cmd='';
+fi
+
+# load key into $key
+
+if [ $(echo $kefile | grep -q '.pub') $? -eq 0 ] && [ -f $keyfile ]; then
+  key="$(cat $keyfile)";
+elif [ -f $keyfile.pub ]; then
+  key="$(cat $keyfile.pub)";
+fi
+
+if [ "$delete" == 'true' ]; then
+  #delete mode
+  ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c '[ -f ~$tgt_user/.ssh/authorized_keys2 ] && exit 0 || exit 1'";
+  if [ $? -gt 0 ]; then
+    echo "No authorized_keys2 file for user ~$tgt_user";
+  else
+## this line assumes bash on the target machine.
+cmd="LINES=\$(grep -n \"$key\" ~$tgt_user/.ssh/authorized_keys2 | grep -Ev \"[0-9]+:#\"|grep -oE \"^[0-9]+\");
+LINES=\$(echo -e \$LINES | tr \"\n\" \";\" | sed \"s/;$//\");
+sed -i \"\${LINES}d\" ~$tgt_user/.ssh/authorized_keys2";
+    ssh $id_cmd $ssh_user@$host "$sudo_cmd bash -c '$cmd'"
+    echo "Removed entry in $tgt_user's .ssh/authorized_keys2 file";
+    exit 0;
+  fi
  
+else
+  ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c '[ -d ~$tgt_user/.ssh ] && echo -n '' || mkdir ~$tgt_user/.ssh'";
+  ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'touch ~$tgt_user/.ssh/authorized_keys2;[ \`grep -q \"$key\" ~$tgt_user/.ssh/authorized_keys2\` \$? -ne 0 ] && echo -n \"$key\" >> ~$tgt_user/.ssh/authorized_keys2;'";
+  echo "Added public key entry in $tgt_user's .ssh/authorized_keys2 file.";
+  ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'chmod 744 ~$tgt_user/.ssh;chmod 600 ~$tgt_user/.ssh/authorized_keys2'";
+  
+fi
+
+# ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'cat ~$tgt_user/.ssh/authorized_keys2'";
