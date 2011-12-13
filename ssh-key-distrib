@@ -6,7 +6,7 @@ tmp=$(echo "$@"|grep -Eo '(-u|--user)=[A-Za-z0-9_\-]+'| grep -Eo '=[A-Za-z0-9_\-
 tmp=$(echo "$@"|grep -Eo '(-U|--tgt_user)=[A-Za-z0-9_\-]+'| grep -Eo '=[A-Za-z0-9_\-]+'|grep -Eo '[A-Za-z0-9_\-]+')
 [ -n "$tmp" ] && tgt_user=$tmp || tgt_user=$USER;
 
-tmp=$(echo "$@"|grep -Eo '(-k|--key)=([A-Za-z0-9_\/\-\.]+|".+")'| grep -Eo '=([A-Za-z0-9_\/\-\.]+|".+")'|grep -Eo '([A-Za-z0-9_\/\-\.]+|".+")')
+tmp=$(echo "$@"|grep -Eo '(-k|--key)=([A-Za-z0-9_./-]+|".+")'| grep -Eo '=([A-Za-z0-9_./-]+|".+")'|grep -Eo '([A-Za-z0-9_ ./-]+)')
 [ -n "$tmp" ] && keyfile="$tmp" || keyfile="~/.ssh/id_rsa";
 
 tmp=$(echo "$@"|grep -Eo '(-H|--host)=([A-Za-z0-9_\/\-\.]+|".+")'| grep -Eo '=([A-Za-z0-9_\/\-\.]+|".+")'|grep -Eo '([A-Za-z0-9_\/\-\.]+|".+")')
@@ -26,14 +26,14 @@ tmp=$(echo "$@"|grep -Eo '(-D|--delete)')
 
 function usage {
 echo -e "$1Usage: ssh-key-distrib -H|--host=example.com [-u|--user=user -U|--tgt_user=TargetUser -k|--key=keyfile -o|--opts=\"ssh options\" -s|--sudo"
-echo -e "-H,--host\tSpecify the host to copy key to.
+echo -e '-H,--host\tSpecify the host to copy key to.
 -u,--user\tSpecify the user to connect as.
 -U,--tgt_user\tSpecify the target user on the host system.
--k,--key\tSpecify the keyfile to read and copy to authorized_keys2 on the host.
+-k,--key\tSpecify the keyfile to read and copy to authorized_keys2 on the host. Paths with spaces should be formated like \"/Path\ To\ File/\".
 -o,--opts\tAdd extra ssh options here.
 -s,--sudo\tUse sudo on the server side to copy keys to alternate user(-u user must have sudo on host.)
 -D,--delete\tDelete key from specified host.
--h,--help\tThis help message.";
+-h,--help\tThis help message.';
 exit 1;
 }
 
@@ -52,10 +52,13 @@ fi
 
 # load key into $key
 
-if [ $(echo $kefile | grep -q '.pub') $? -eq 0 ] && [ -f $keyfile ]; then
-  key="$(cat $keyfile)";
-elif [ -f $keyfile.pub ]; then
-  key="$(cat $keyfile.pub)";
+if [ $(echo "$kefile" | grep -q '.pub') $? -eq 0 ] && [ -f "$keyfile" ]; then
+  key=$(cat $keyfile);
+elif [ -f "$keyfile.pub" ]; then
+  key=$(cat "$keyfile.pub");
+else
+  echo "Can't find keyfile for $keyfile";
+  exit 1;
 fi
 
 if [ "$delete" == 'true' ]; then
