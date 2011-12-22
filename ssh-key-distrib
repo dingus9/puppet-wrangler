@@ -24,6 +24,9 @@ tmp=$(echo "$@"|grep -Eo '(-h|--help)')
 tmp=$(echo "$@"|grep -Eo '(-D|--delete)')
 [ -n "$tmp" ] && delete='true' || delete='false';
 
+tmp=$(echo "$@"|grep -Eo '(-M|--master)')
+[ -n "$tmp" ] && master='true' || master='false';
+
 function usage {
 echo -e "$1Usage: ssh-key-distrib -H|--host=example.com [-u|--user=user -U|--tgt_user=TargetUser -k|--key=keyfile -o|--opts=\"ssh options\" -s|--sudo"
 echo -e '-H,--host\tSpecify the host to copy key to.
@@ -51,37 +54,54 @@ else
 fi
 
 # load key into $key
-
-if [ $(echo "$kefile" | grep -q '.pub') $? -eq 0 ] && [ -f "$keyfile" ]; then
-  key=$(cat $keyfile);
-elif [ -f "$keyfile.pub" ]; then
-  key=$(cat "$keyfile.pub");
+if [ "$master" == 'true' ]; then
+  if [ $(echo "$kefile" | grep -q '.pub') $? -eq 1 ] && [ -f "$keyfile" ]; then
+    key=$(cat "$keyfile");
+  fi
 else
-  echo "Can't find keyfile for $keyfile";
-  exit 1;
+  if [ $(echo "$kefile" | grep -q '.pub') $? -eq 0 ] && [ -f "$keyfile" ]; then
+    key=$(cat $keyfile);
+  elif [ -f "$keyfile.pub" ]; then
+    key=$(cat "$keyfile.pub");
+  else
+    echo "Can't find keyfile for $keyfile";
+    exit 1;
+  fi
 fi
 
 if [ "$delete" == 'true' ]; then
   #delete mode
-  ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c '[ -f ~$tgt_user/.ssh/authorized_keys2 ] && exit 0 || exit 1'";
-  if [ $? -gt 0 ]; then
-    echo "No authorized_keys2 file for user ~$tgt_user";
+  if [ "$master" == 'true' ]; then
+    keyname=$(basename $keyfile);
+    ssh $id_cmd $ssh_user@$host "$sudo_cmd bash -c 'rm ~$tgt_user/.ssh/$keyname'"
+    echo "Removed key $keyname in $tgt_users .ssh/ directory";
   else
-## this line assumes bash on the target machine.
-cmd="LINES=\$(grep -n \"$key\" ~$tgt_user/.ssh/authorized_keys2 | grep -Ev \"[0-9]+:#\"|grep -oE \"^[0-9]+\");
+    ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c '[ -f ~$tgt_user/.ssh/authorized_keys2 ] && exit 0 || exit 1'";
+    if [ $? -gt 0 ]; then
+      echo "No authorized_keys2 file for user ~$tgt_user";
+    else
+    ## this line assumes bash on the target machine.
+      cmd="LINES=\$(grep -n \"$key\" ~$tgt_user/.ssh/authorized_keys2 | grep -Ev \"[0-9]+:#\"|grep -oE \"^[0-9]+\");
 LINES=\$(echo -e \$LINES | tr \"\n\" \";\" | sed \"s/;$//\");
 sed -i \"\${LINES}d\" ~$tgt_user/.ssh/authorized_keys2";
-    ssh $id_cmd $ssh_user@$host "$sudo_cmd bash -c '$cmd'"
-    echo "Removed entry in $tgt_user's .ssh/authorized_keys2 file";
-    exit 0;
+      ssh $id_cmd $ssh_user@$host "$sudo_cmd bash -c '$cmd'"
+      echo "Removed entry in $tgt_user's .ssh/authorized_keys2 file";
+      exit 0;
+    fi
   fi
- 
 else
   ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c '[ -d ~$tgt_user/.ssh ] && echo -n '' || mkdir ~$tgt_user/.ssh'";
-  ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'touch ~$tgt_user/.ssh/authorized_keys2;[ \`grep -q \"$key\" ~$tgt_user/.ssh/authorized_keys2\` \$? -ne 0 ] && echo -n \"$key\" >> ~$tgt_user/.ssh/authorized_keys2;'";
-  echo "Added public key entry in $tgt_user's .ssh/authorized_keys2 file.";
-  ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'chmod 744 ~$tgt_user/.ssh;chmod 600 ~$tgt_user/.ssh/authorized_keys2'";
   
+  if [ "$master" == 'true' ]; then
+  #master key copy
+    keyname=$(basename $keyfile);
+    ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'echo \"$key\" > ~$tgt_user/.ssh/$keyname;chmod 600 ~$tgt_user/.ssh/$keyname;'";
+    echo "Added private(master) key \"$keyname\" in $tgt_user's .ssh/ directory";
+  else
+    ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'touch ~$tgt_user/.ssh/authorized_keys2;[ \`grep -q \"$key\" ~$tgt_user/.ssh/authorized_keys2\` \$? -ne 0 ] && echo \"$key\" >> ~$tgt_user/.ssh/authorized_keys2;'";
+    echo "Added public key entry in $tgt_user's .ssh/authorized_keys2 file.";
+    ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'chmod 744 ~$tgt_user/.ssh;chmod 600 ~$tgt_user/.ssh/authorized_keys2'";
+  fi
 fi
 
 # ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'cat ~$tgt_user/.ssh/authorized_keys2'";
