@@ -1,7 +1,8 @@
 #!/bin/bash
-## Installs puppet on ubuntu and issues puppet certificate sighning request with the puppet master
-NAME='bootstrap_puppet';
-SSH_KEY="$HOME/.ssh/id_rsa";
+## Installs puppet on ubuntu and issues puppet certificate sighning request with the puppet master.
+## Run "./bootstrap_puppet"
+NAME="$(basename $0)";
+SSH_KEY="~/.ssh/id_rsa";
 
 PUPPET_MASTER='self';
 PUPPETDIR='/etc/puppet';

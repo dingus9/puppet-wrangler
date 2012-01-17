@@ -33,6 +33,7 @@ echo -e '-H,--host\tSpecify the host to copy key to.
 -u,--user\tSpecify the user to connect as.
 -U,--tgt_user\tSpecify the target user on the host system.
 -k,--key\tSpecify the keyfile to read and copy to authorized_keys2 on the host. Paths with spaces should be formated like \"/Path\ To\ File/\".
+-M,--master\tThis is a master key not a public one.
 -o,--opts\tAdd extra ssh options here.
 -s,--sudo\tUse sudo on the server side to copy keys to alternate user(-u user must have sudo on host.)
 -D,--delete\tDelete key from specified host.
