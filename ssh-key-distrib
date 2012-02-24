@@ -6,7 +6,7 @@ tmp=$(echo "$@"|grep -Eo '(-u|--user)=[A-Za-z0-9_\-]+'| grep -Eo '=[A-Za-z0-9_\-
 tmp=$(echo "$@"|grep -Eo '(-U|--tgt_user)=[A-Za-z0-9_\-]+'| grep -Eo '=[A-Za-z0-9_\-]+'|grep -Eo '[A-Za-z0-9_\-]+')
 [ -n "$tmp" ] && tgt_user=$tmp || tgt_user=$USER;
 
-tmp=$(echo "$@"|grep -Eo '(-k|--key)=([A-Za-z0-9_./-]+|".+")'| grep -Eo '=([A-Za-z0-9_./-]+|".+")'|grep -Eo '([A-Za-z0-9_ ./-]+)')
+tmp=$(echo "$@"|grep -Eo '(-k|--key)=([A-Za-z0-9_./-]+|"[A-Za-z0-9\\ _./-]+")'| grep -Eo '=([A-Za-z0-9_./-]+|"[A-Za-z0-9\\ _./-]+")'|grep -Eo '([A-Za-z0-9_\\ ./-]+)')
 [ -n "$tmp" ] && keyfile="$tmp" || keyfile="~/.ssh/id_rsa";
 
 tmp=$(echo "$@"|grep -Eo '(-H|--host)=([A-Za-z0-9_\/\-\.]+|".+")'| grep -Eo '=([A-Za-z0-9_\/\-\.]+|".+")'|grep -Eo '([A-Za-z0-9_\/\-\.]+|".+")')
@@ -27,8 +27,11 @@ tmp=$(echo "$@"|grep -Eo '(-D|--delete)')
 tmp=$(echo "$@"|grep -Eo '(-M|--master)')
 [ -n "$tmp" ] && master='true' || master='false';
 
+tmp=$(echo "$@"|grep -Eo '(-c|--create)')
+[ -n "$tmp" ] && create='true' || create='false';
+
 function usage {
-echo -e "$1Usage: ssh-key-distrib -H|--host=example.com [-u|--user=user -U|--tgt_user=TargetUser -k|--key=keyfile -o|--opts=\"ssh options\" -s|--sudo"
+echo -e "$1\n\nUsage: ssh-key-distrib -H|--host=example.com [-u|--user=user -U|--tgt_user=TargetUser -k|--key=keyfile -o|--opts=\"ssh options\" -s|--sudo"
 echo -e '-H,--host\tSpecify the host to copy key to.
 -u,--user\tSpecify the user to connect as.
 -U,--tgt_user\tSpecify the target user on the host system.
@@ -37,6 +40,7 @@ echo -e '-H,--host\tSpecify the host to copy key to.
 -o,--opts\tAdd extra ssh options here.
 -s,--sudo\tUse sudo on the server side to copy keys to alternate user(-u user must have sudo on host.)
 -D,--delete\tDelete key from specified host.
+-c,--create\tCreate user if it does not exist.
 -h,--help\tThis help message.';
 exit 1;
 }
@@ -44,7 +48,7 @@ exit 1;
 [ -n "$help" ] && usage || t=1;
 
 if [ -z "$host" ]; then
-  usage "-h|--host is required:\n"
+  usage "Error: -h|--host is required"
 fi
 
 if [ "$sudo" == 'sudo' ] && [ "$tgt_user" != "$ssh_user" ]; then
@@ -91,8 +95,11 @@ sed -i \"\${LINES}d\" ~$tgt_user/.ssh/authorized_keys2";
     fi
   fi
 else
-  ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c '[ -d ~$tgt_user/.ssh ] && echo -n '' || mkdir ~$tgt_user/.ssh'";
-  
+  [ "$create" == 'true' ] && [ "$tgt_user" != "$ssh_user" ] && c_user="[ \$(grep -q '^$tgt_user' /etc/passwd); \$? -ne 0 ] && adduser $tgt_user --ingroup admin; " || c_user='';
+  [ "$create" == 'true' ] && [ "$tgt_user" != "$ssh_user" ] && c_cmd='-T' || c_cmd='';
+  ## needs testing
+  ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c '$c_user[ -d ~$tgt_user/.ssh ] && echo -n '' || mkdir ~$tgt_user/.ssh'";
+  ## needs testing
   if [ "$master" == 'true' ]; then
   #master key copy
     keyname=$(basename $keyfile);
