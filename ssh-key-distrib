@@ -95,7 +95,8 @@ sed -i \"\${LINES}d\" ~$tgt_user/.ssh/authorized_keys2";
     fi
   fi
 else
-  [ "$create" == 'true' ] && [ "$tgt_user" != "$ssh_user" ] && c_user="[ \$(grep -q '^$tgt_user' /etc/passwd); \$? -ne 0 ] && adduser $tgt_user --ingroup admin; " || c_user='';
+  [ "$create" == 'true' ] && [ "$tgt_user" != "$ssh_user" ] && c_user="[ \$(grep -q '^$tgt_user' /etc/passwd) \$? -ne 0 ] && adduser $tgt_user --ingroup admin; " || c_user='';
+
   [ "$create" == 'true' ] && [ "$tgt_user" != "$ssh_user" ] && c_cmd='-T' || c_cmd='';
   ## needs testing
   ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c '$c_user[ -d ~$tgt_user/.ssh ] && echo -n '' || mkdir ~$tgt_user/.ssh'";
@@ -106,9 +107,8 @@ else
     ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'echo \"$key\" > ~$tgt_user/.ssh/$keyname;chmod 600 ~$tgt_user/.ssh/$keyname;'";
     echo "Added private(master) key \"$keyname\" in $tgt_user's .ssh/ directory";
   else
-    ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'touch ~$tgt_user/.ssh/authorized_keys2;[ \`grep -q \"$key\" ~$tgt_user/.ssh/authorized_keys2\` \$? -ne 0 ] && echo \"$key\" >> ~$tgt_user/.ssh/authorized_keys2;'";
+    ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'touch ~$tgt_user/.ssh/authorized_keys2;[ \`grep -q \"$key\" ~$tgt_user/.ssh/authorized_keys2\` \$? -ne 0 ] && echo \"$key\" >> ~$tgt_user/.ssh/authorized_keys2 && chmod 740 ~$tgt_user/.ssh && chmod 600 ~$tgt_user/.ssh/authorized_keys2 && chown -R $tgt_user ~$tgt_user/.ssh'";
     echo "Added public key entry in $tgt_user's .ssh/authorized_keys2 file.";
-    ssh $id_cmd $ssh_user@$host "$sudo_cmd /bin/bash -c 'chmod 744 ~$tgt_user/.ssh;chmod 600 ~$tgt_user/.ssh/authorized_keys2'";
   fi
 fi
 
