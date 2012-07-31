@@ -1,0 +1,13 @@
+host=$1;
+ssh_user=$USER;
+id_cmd='-t';
+sudo_cmd='sudo '
+
+ssh $id_cmd $ssh_user@$host $sudo_cmd'sed -i "s/#PubkeyAuthentication yes/PubkeyAuthentication yes/" /etc/ssh/sshd_config';
+
+ssh $id_cmd $ssh_user@$host $sudo_cmd'sed -i "s/PasswordAuthentication yes/PasswordAuthentication no/" /etc/ssh/sshd_config';
+
+ssh $id_cmd $ssh_user@$host $sudo_cmd'sed -i "s/#PasswordAuthentication/PasswordAuthentication/" /etc/ssh/sshd_config';
+
+ssh $id_cmd $ssh_user@$host $sudo_cmd'service ssh restart';
+ 
